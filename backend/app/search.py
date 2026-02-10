@@ -1,7 +1,7 @@
 """
 Meilisearch integration module.
 Handles indexing and searching of documents using Meilisearch.
-Supports multiple storage backends: MSSQL
+Supports multiple storage backends: MSSQL, MySQL, Google Drive
 """
 from typing import List, Dict, Optional
 import meilisearch
@@ -34,7 +34,7 @@ class SearchEngine:
         self._initialize_storage()
     
     def _initialize_storage(self):
-        """Initialize storage client (MSSQL)"""
+        """Initialize storage client (MSSQL, MySQL, or Google Drive)"""
         if self.config.STORAGE_TYPE == 'mssql':
             from app.mssqlclient import get_mssql_client
             
@@ -47,6 +47,16 @@ class SearchEngine:
             )
             print(f"Initialized MSSQL storage client: {self.config.MSSQL_HOST}/{self.config.MSSQL_DATABASE}")
         
+        elif self.config.STORAGE_TYPE == 'mysql':
+            from app.mysql_client import get_mysql_client
+            
+            self.storage_client = get_mysql_client(
+                host=self.config.MYSQL_HOST,
+                user=self.config.MYSQL_USER,
+                password=self.config.MYSQL_PASSWORD,
+                database=self.config.MYSQL_DATABASE
+            )
+            print(f"Initialized MySQL storage client: {self.config.MYSQL_HOST}/{self.config.MYSQL_DATABASE}")
         
         else:
             print(f"Unsupported storage type: {self.config.STORAGE_TYPE}")
@@ -71,13 +81,10 @@ class SearchEngine:
                 'title',
                 'form_no',
                 'content',
-                'path',
-                'source_table'
+                'path'
             ],
             'displayedAttributes': [
                 'id',
-                'source_table',
-                'original_id',
                 'name',
                 'title',
                 'form_no',
@@ -93,16 +100,12 @@ class SearchEngine:
             'filterableAttributes': [
                 'mimeType',
                 'modifiedTime',
-                'source_table',
                 'metadata.form_type',
-                'metadata.department',
-                'metadata.vessel_id',
-                'metadata.survey_type'
+                'metadata.department'
             ],
             'sortableAttributes': [
                 'modifiedTime',
-                'name',
-                'source_table'
+                'name'
             ],
             'rankingRules': [
                 'words',
@@ -117,7 +120,7 @@ class SearchEngine:
     
     def index_documents(self, progress_callback=None) -> Dict:
         """
-        Index all documents from storage (MSSQL).
+        Index all documents from storage (MSSQL, MySQL, or Google Drive).
         
         Args:
             progress_callback: Optional callback function for progress updates
@@ -194,8 +197,6 @@ class SearchEngine:
                 # Create document for indexing
                 document = {
                     'id': file_info['id'],
-                    'source_table': file_info.get('source_table', 'FORMS_MASTER'),  # Track source table
-                    'original_id': file_info.get('original_id', file_info['id']),
                     'name': file_info['name'],
                     'title': file_info.get('title', file_info['name']),
                     'form_no': file_info.get('form_no', ''),
@@ -206,26 +207,57 @@ class SearchEngine:
                     'modifiedTime': file_info.get('modifiedTime', ''),
                     'webViewLink': file_info.get('webViewLink', ''),
                     'metadata': file_info.get('metadata', {}),
-                    'page_info': page_info
+                    'page_info': page_info  # â† ADD THIS LINE
                 }
                 
                 documents.append(document)
                 indexed_count += 1
                 
                 # Batch indexing
+                # Batch indexing
                 if len(documents) >= batch_size:
                     print(f"  Indexing batch of {len(documents)} documents...")
-                    self.index.add_documents(documents)
+                    try:
+                        task = self.index.add_documents(documents)
+                        print(f"  ✓ Batch submitted. Task UID: {task.task_uid if hasattr(task, 'task_uid') else 'unknown'}")
+                        
+                        # Check task status
+                        if hasattr(task, 'task_uid'):
+                            import time
+                            time.sleep(0.5)  # Give Meilisearch time to process
+                            task_status = self.client.get_task(task.task_uid)
+                            print(f"  Task status: {task_status.status if hasattr(task_status, 'status') else 'unknown'}")
+                            if hasattr(task_status, 'error') and task_status.error:
+                                print(f"  ✗ Task error: {task_status.error}")
+                    except Exception as e:
+                        print(f"  ✗ Error indexing batch: {e}")
+                        import traceback
+                        traceback.print_exc()
                     documents = []
             
             except Exception as e:
                 print(f"  Error processing {file_info.get('name', 'unknown')}: {e}")
                 failed_count += 1
         
-        # Index remaining documents
+       # Index remaining documents
         if documents:
             print(f"Indexing final batch of {len(documents)} documents...")
-            self.index.add_documents(documents)
+            try:
+                task = self.index.add_documents(documents)
+                print(f"✓ Final batch submitted. Task UID: {task.task_uid if hasattr(task, 'task_uid') else 'unknown'}")
+                
+                # Wait for final batch to process
+                if hasattr(task, 'task_uid'):
+                    import time
+                    time.sleep(1)
+                    task_status = self.client.get_task(task.task_uid)
+                    print(f"Final task status: {task_status.status if hasattr(task_status, 'status') else 'unknown'}")
+                    if hasattr(task_status, 'error') and task_status.error:
+                        print(f"✗ Final task error: {task_status.error}")
+            except Exception as e:
+                print(f"✗ Error indexing final batch: {e}")
+                import traceback
+                traceback.print_exc()
         
         stats = {
             'total': total_files,
@@ -293,21 +325,72 @@ class SearchEngine:
     def get_stats(self) -> Dict:
         """
         Get index statistics.
+        Handles nested IndexStats objects.
         
         Returns:
             Dictionary with index statistics
         """
         try:
             stats = self.index.get_stats()
-            return {
-                'numberOfDocuments': stats.get('numberOfDocuments', 0),
-                'isIndexing': stats.get('isIndexing', False),
-                'fieldDistribution': stats.get('fieldDistribution', {}),
+            
+            result = {
                 'storageType': self.config.STORAGE_TYPE
             }
+            
+            # Get number of documents
+            try:
+                result['numberOfDocuments'] = int(stats.number_of_documents)
+            except (AttributeError, TypeError):
+                result['numberOfDocuments'] = 0
+            
+            # Get is_indexing
+            try:
+                result['isIndexing'] = bool(stats.is_indexing)
+            except (AttributeError, TypeError):
+                result['isIndexing'] = False
+            
+            # Get field_distribution - THIS IS THE TRICKY PART
+            # It can be an IndexStats object itself!
+            try:
+                field_dist = stats.field_distribution
+                
+                # If it's an object, convert it to a dict
+                if hasattr(field_dist, '__dict__'):
+                    # It's an object, extract its attributes
+                    safe_dict = {}
+                    for key in dir(field_dist):
+                        if not key.startswith('_'):
+                            try:
+                                value = getattr(field_dist, key)
+                                # Only include simple types (int, str, bool)
+                                if isinstance(value, (int, str, bool, float)):
+                                    safe_dict[key] = value
+                            except:
+                                pass
+                    result['fieldDistribution'] = safe_dict
+                elif isinstance(field_dist, dict):
+                    # It's already a dict, just use it
+                    result['fieldDistribution'] = dict(field_dist)
+                else:
+                    result['fieldDistribution'] = {}
+                    
+            except (AttributeError, TypeError) as e:
+                print(f"Warning: Could not get field_distribution: {e}")
+                result['fieldDistribution'] = {}
+            
+            return result
+            
         except Exception as e:
             print(f"Error getting stats: {e}")
-            return {'error': str(e)}
+            import traceback
+            traceback.print_exc()
+            return {
+                'numberOfDocuments': 0,
+                'isIndexing': False,
+                'fieldDistribution': {},
+                'storageType': self.config.STORAGE_TYPE,
+                'error': str(e)
+            }
     
     def clear_index(self):
         """Clear all documents from the index"""

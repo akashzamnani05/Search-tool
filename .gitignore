@@ -7,3 +7,5 @@ backend/node_modules
 backend/.vscode
 meilisearch
 data.ms/
+
+frontend/.next

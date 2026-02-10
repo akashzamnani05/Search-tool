@@ -107,7 +107,7 @@ class MSSQLClient:
         Returns:
             Composite ID in format "TABLE_NAME:RECORD_ID"
         """
-        return f"{table_name}:{record_id}"
+        return f"{table_name}_{record_id}"
     
     def _parse_composite_id(self, composite_id: str) -> tuple:
         """
@@ -119,13 +119,14 @@ class MSSQLClient:
         Returns:
             Tuple of (table_name, record_id)
         """
-        if ':' in composite_id:
-            parts = composite_id.split(':', 1)
-            return parts[0], parts[1]
-        else:
-            # Fallback for old IDs without table prefix (assume FORMS_MASTER)
-            return 'FORMS_MASTER', composite_id
-    
+        if '_' in composite_id:
+        # Need to handle tables that might have underscores
+        # Known tables: FORMS_MASTER, VESSEL_CERTIFICATES, SurveyCertificates
+            for table in ['FORMS_MASTER', 'VESSEL_CERTIFICATES', 'SurveyCertificates']:
+                if composite_id.startswith(table + '_'):
+                    record_id = composite_id[len(table) + 1:]
+                    return table, record_id
+        
     def _get_table_schema(self, table_name: str) -> Dict:
         """
         Get schema configuration for a table.

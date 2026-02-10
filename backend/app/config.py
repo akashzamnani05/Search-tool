@@ -18,9 +18,10 @@ class Config:
         self.MSSQL_DATABASE = os.getenv('MSSQL_DATABASE', '')
         self.MSSQL_DRIVER = os.getenv('MSSQL_DRIVER', 'ODBC Driver 17 for SQL Server')
         
-        # Database tables to index (comma-separated)
+        # Database tables to index (comma-separated list)
         # Default: FORMS_MASTER,VESSEL_CERTIFICATES,SurveyCertificates
-        self.DATABASE_TABLES = os.getenv('DATABASE_TABLES', 'FORMS_MASTER,VESSEL_CERTIFICATES,SurveyCertificates').split(',')
+        tables_str = os.getenv('DATABASE_TABLES', 'FORMS_MASTER,VESSEL_CERTIFICATES,SurveyCertificates')
+        self.DATABASE_TABLES = [t.strip() for t in tables_str.split(',') if t.strip()]
         
         # Meilisearch Configuration
         self.MEILISEARCH_HOST = os.getenv('MEILISEARCH_HOST', 'http://127.0.0.1:7700')
@@ -70,3 +71,6 @@ class Config:
                 print("WARNING: MSSQL configuration is incomplete!")
                 print("Required: MSSQL_HOST, MSSQL_USER, MSSQL_PASSWORD, MSSQL_DATABASE")
         
+        if not self.DATABASE_TABLES:
+            print("WARNING: No DATABASE_TABLES configured!")
+            print("At least one table must be specified for indexing.")
