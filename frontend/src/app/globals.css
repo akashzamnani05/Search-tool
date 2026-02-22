@@ -124,6 +124,16 @@
   font-weight: 500;
 }
 
+/* Meilisearch <em> highlights inside content snippets */
+.search-snippet em {
+  background-color: #fde68a;
+  color: #78350f;
+  font-style: normal;
+  font-weight: 600;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 /* Base styles */
 body {
   @apply bg-gray-50 text-gray-900;

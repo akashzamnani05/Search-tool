@@ -274,44 +274,49 @@ class SearchEngine:
         return stats
     
     def search(
-        self, 
-        query: str, 
+        self,
+        query: str,
         limit: int = None,
+        offset: int = 0,
         filters: str = None
     ) -> Dict:
         """
         Search for documents matching the query.
-        
+
         Args:
             query: Search query string
             limit: Maximum number of results (default from config)
+            offset: Number of results to skip (for pagination)
             filters: Optional Meilisearch filters
-            
+
         Returns:
             Dictionary with search results
         """
         if limit is None:
             limit = self.config.MAX_SEARCH_RESULTS
-        
+
         try:
             search_params = {
                 'limit': limit,
+                'offset': offset,
                 'attributesToHighlight': ['name', 'title', 'form_no', 'content'],
                 'attributesToCrop': ['content'],
                 'cropLength': 200,
                 'showMatchesPosition': True
             }
-            
+
             if filters:
                 search_params['filter'] = filters
-            
+
             results = self.index.search(query, search_params)
-            
+
             return {
                 'hits': results['hits'],
                 'query': query,
                 'processingTimeMs': results.get('processingTimeMs', 0),
-                'estimatedTotalHits': results.get('estimatedTotalHits', 0)
+                'estimatedTotalHits': results.get('estimatedTotalHits', 0),
+                'offset': offset,
+                'limit': limit,
             }
         
         except Exception as e:

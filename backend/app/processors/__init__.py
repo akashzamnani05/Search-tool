@@ -9,12 +9,14 @@ from .docx_processor import DOCXProcessor
 from .text_processor import TextProcessor
 from .excel_processor import ExcelProcessor
 from .ppt_processor import PowerPointProcessor
+from .image_processor import ImageProcessor
 
 
 class ProcessorFactory:
     """Factory class for creating appropriate document processors"""
-    
+
     def __init__(self):
+        _image = ImageProcessor()
         self.processors = {
             'pdf': PDFProcessor(),
             'doc': DOCXProcessor(),  # Note: .doc files may need special handling
@@ -23,7 +25,16 @@ class ProcessorFactory:
             'xlsx': ExcelProcessor(),
             'xls': ExcelProcessor(),
             'pptx': PowerPointProcessor(),
-            'ppt': PowerPointProcessor()
+            'ppt': PowerPointProcessor(),
+            # Image formats — OCR via pytesseract
+            'jpg': _image,
+            'jpeg': _image,
+            'png': _image,
+            'gif': _image,
+            'bmp': _image,
+            'tiff': _image,
+            'tif': _image,
+            'webp': _image,
         }
     
     def get_processor(self, filename: str) -> Optional[BaseProcessor]:

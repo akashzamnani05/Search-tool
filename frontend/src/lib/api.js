@@ -26,10 +26,10 @@ async function fetchAPI(endpoint, options = {}) {
   }
 }
 
-export async function searchDocuments(query, limit = 20) {
+export async function searchDocuments(query, limit = 10, offset = 0) {
   return fetchAPI('/search', {
     method: 'POST',
-    body: JSON.stringify({ query, limit }),
+    body: JSON.stringify({ query, limit, offset }),
   });
 }
 
@@ -57,7 +57,14 @@ export async function getConfig() {
  * NOTE: documentId is composite ID like "VESSEL_CERTIFICATES:456" 
  * The table name is already included in the ID from search results
  */
+export const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'];
+
 export function getDocumentViewUrl(documentId, query = null, pageNumber = null, documentName = null, viewerType = 'pdfjs') {
+  // For images — open proxy URL directly; browsers render images natively
+  if (documentName && IMAGE_EXTENSIONS.some(ext => documentName.toLowerCase().endsWith(ext))) {
+    return `${API_URL}/document/${encodeURIComponent(documentId)}/proxy`;
+  }
+
   // For Word documents - use Google Docs viewer
   if (documentName && (documentName.toLowerCase().endsWith('.docx') || documentName.toLowerCase().endsWith('.doc'))) {
     // URL encode the composite document ID
@@ -72,12 +79,11 @@ export function getDocumentViewUrl(documentId, query = null, pageNumber = null, 
     return `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
   }
   
-  // Default: Mozilla PDF.js viewer
+  // Default: self-hosted PDF.js viewer (served from /public/pdfjs/)
   const pdfProxyUrl = `${API_URL}/document/${encodeURIComponent(documentId)}/proxy`;
   const encodedPdfUrl = encodeURIComponent(pdfProxyUrl);
-  
-  // Build Mozilla PDF.js viewer URL
-  let viewerUrl = `https://mozilla.github.io/pdf.js/web/viewer.html?file=${encodedPdfUrl}`;
+
+  let viewerUrl = `/pdfjs/web/viewer.html?file=${encodedPdfUrl}`;
   
   // Add fragment for search and page
   let fragment = '';
@@ -110,6 +116,13 @@ export function findPageNumber(document, query) {
   }
   
   return null;
+}
+
+/**
+ * Get the raw proxy URL for a document (used for in-browser rendering)
+ */
+export function getDocumentProxyUrl(documentId) {
+  return `${API_URL}/document/${encodeURIComponent(documentId)}/proxy`;
 }
 
 /**

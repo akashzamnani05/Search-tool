@@ -61,13 +61,14 @@ def search():
         data = request.get_json()
         query = data.get('query', '')
         limit = data.get('limit')
+        offset = data.get('offset', 0)
         filters = data.get('filters')
-        
+
         if not query:
             return jsonify({'error': 'Query parameter is required'}), 400
-        
+
         engine = get_or_create_search_engine()
-        results = engine.search(query, limit=limit, filters=filters)
+        results = engine.search(query, limit=limit, offset=offset, filters=filters)
         
         return jsonify(results)
     

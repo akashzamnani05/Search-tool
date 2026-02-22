@@ -1,1 +1,1 @@
-self.__REACT_LOADABLE_MANIFEST="{}"
+self.__REACT_LOADABLE_MANIFEST="{\"app/viewer/page.js -> docx-preview\":{\"id\":\"app/viewer/page.js -> docx-preview\",\"files\":[\"static/chunks/_app-pages-browser_node_modules_docx-preview_dist_docx-preview_mjs.js\"]}}"

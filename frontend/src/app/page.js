@@ -6,21 +6,23 @@ import SearchBar from '@/components/SearchBar'
 import SearchResults from '@/components/SearchResults'
 import IndexingPanel from '@/components/IndexingPanel'
 import { searchDocuments } from '@/lib/api'
-import { RefreshCw, AlertCircle } from 'lucide-react'
+import { FileSearch, Zap, Layers } from 'lucide-react'
+
+const PER_PAGE = 10
 
 export default function HomePage() {
   const [results, setResults] = useState(null)
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
-  
-  const handleSearch = async (searchQuery) => {
+  const [currentPage, setCurrentPage] = useState(1)
+
+  const fetchPage = async (searchQuery, page) => {
     setIsLoading(true)
     setError(null)
-    setQuery(searchQuery)
-    
+    const offset = (page - 1) * PER_PAGE
     try {
-      const data = await searchDocuments(searchQuery)
+      const data = await searchDocuments(searchQuery, PER_PAGE, offset)
       setResults(data)
     } catch (err) {
       setError(err.message || 'Failed to search documents')
@@ -29,101 +31,139 @@ export default function HomePage() {
       setIsLoading(false)
     }
   }
-  
-  const handleRetry = () => {
-    if (query) {
-      handleSearch(query)
-    }
+
+  const handleSearch = async (searchQuery) => {
+    setQuery(searchQuery)
+    setCurrentPage(1)
+    await fetchPage(searchQuery, 1)
   }
-  
+
+  const handlePageChange = async (page) => {
+    setCurrentPage(page)
+    await fetchPage(query, page)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const hasQuery = !!query
+
   return (
-    <>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <SearchBar 
-            onSearch={handleSearch}
-            isLoading={isLoading}
-          />
-        </div>
-        
-        {error && error.includes('fetch') && (
-          <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <div className="flex items-start space-x-3">
-              <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-sm font-medium text-amber-900 mb-1">
-                  Cannot connect to API
-                </h3>
-                <p className="text-sm text-amber-700 mb-2">
-                  Make sure the backend server is running at{' '}
-                  <code className="bg-amber-100 px-1 py-0.5 rounded">
-                    {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api'}
-                  </code>
-                </p>
-                <button
-                  onClick={handleRetry}
-                  className="flex items-center space-x-2 text-sm font-medium text-amber-700 hover:text-amber-800"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  <span>Retry connection</span>
-                </button>
+    <div className="min-h-screen flex flex-col bg-gray-50">
+
+      {/* ── Header ──────────────────────────────────────────────────────── */}
+      <header className="bg-slate-900 sticky top-0 z-40 shadow-lg">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+          {hasQuery ? (
+            /* Compact header: logo + inline search bar */
+            <div className="flex items-center gap-4 py-2.5">
+              <div className="flex-shrink-0 flex items-center gap-2">
+                <FileSearch className="h-6 w-6 text-blue-400" />
+                <span className="text-white font-bold text-base hidden sm:block tracking-tight">
+                  DocSearch
+                </span>
+              </div>
+              <div className="flex-1 max-w-2xl">
+                <SearchBar onSearch={handleSearch} isLoading={isLoading} compact />
               </div>
             </div>
+          ) : (
+            /* Full header: just logo */
+            <div className="flex items-center gap-2 py-4">
+              <FileSearch className="h-7 w-7 text-blue-400" />
+              <span className="text-white font-bold text-xl tracking-tight">DocSearch</span>
+            </div>
+          )}
+        </div>
+      </header>
+
+      {/* ── Hero (shown only when no query) ─────────────────────────────── */}
+      {!hasQuery && (
+        <section className="bg-gradient-to-b from-slate-800 to-slate-700 py-20 px-4">
+          <div className="max-w-2xl mx-auto text-center">
+            <h1 className="text-3xl sm:text-4xl font-extrabold text-white mb-3 leading-tight">
+              Find Any Document, Instantly
+            </h1>
+            <p className="text-slate-400 mb-10 text-base">
+              Full-text search across all your files — PDFs, Word docs, spreadsheets, and more.
+            </p>
+            <SearchBar onSearch={handleSearch} isLoading={isLoading} />
           </div>
-        )}
-        
-        <div>
-          <SearchResults 
+        </section>
+      )}
+
+      {/* ── Main content ─────────────────────────────────────────────────── */}
+      <main className="flex-1">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+
+          {/* Connection error banner */}
+          {error && error.toLowerCase().includes('fetch') && (
+            <div className="mb-6 bg-amber-50 border border-amber-200 rounded-lg p-4 flex items-start gap-3">
+              <span className="text-amber-600 text-base mt-0.5">⚠</span>
+              <p className="text-sm text-amber-800">
+                Cannot connect to the API at{' '}
+                <code className="bg-amber-100 px-1 py-0.5 rounded text-xs">
+                  {process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/api'}
+                </code>.{' '}
+                Make sure the backend server is running.
+              </p>
+            </div>
+          )}
+
+          {/* Results */}
+          <SearchResults
             results={results}
             query={query}
             isLoading={isLoading}
             error={error}
+            currentPage={currentPage}
+            perPage={PER_PAGE}
+            onPageChange={handlePageChange}
           />
-        </div>
-        
-        {!query && !isLoading && (
-          <div className="mt-12 grid md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-2xl">🔍</span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Full-Text Search
-              </h3>
-              <p className="text-sm text-gray-600">
-                Search through the complete content of all your documents, not just filenames
-              </p>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-2xl">⚡</span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Lightning Fast
-              </h3>
-              <p className="text-sm text-gray-600">
-                Powered by Meilisearch for instant results with relevance ranking
-              </p>
-            </div>
-            
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center mb-4">
-                <span className="text-2xl">📁</span>
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Multiple Formats
-              </h3>
-              <p className="text-sm text-gray-600">
-                Supports PDF, Word, Excel, PowerPoint, and text files from Google Drive
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
 
-      {/* Admin Panel - Floating Button */}
+          {/* Feature cards (no-query state) */}
+          {!hasQuery && !isLoading && (
+            <div className="mt-10 grid sm:grid-cols-3 gap-5">
+              {[
+                {
+                  icon: <FileSearch className="h-5 w-5 text-blue-600" />,
+                  bg: 'bg-blue-50',
+                  title: 'Full-Text Search',
+                  desc: 'Search through the complete content of all your documents, not just filenames.',
+                },
+                {
+                  icon: <Zap className="h-5 w-5 text-emerald-600" />,
+                  bg: 'bg-emerald-50',
+                  title: 'Lightning Fast',
+                  desc: 'Powered by Meilisearch for instant results with built-in relevance ranking.',
+                },
+                {
+                  icon: <Layers className="h-5 w-5 text-violet-600" />,
+                  bg: 'bg-violet-50',
+                  title: 'Multiple Formats',
+                  desc: 'Supports PDF, Word, Excel, PowerPoint, images, and plain text files.',
+                },
+              ].map(({ icon, bg, title, desc }) => (
+                <div key={title} className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm">
+                  <div className={`w-10 h-10 ${bg} rounded-lg flex items-center justify-center mb-4`}>
+                    {icon}
+                  </div>
+                  <h3 className="text-sm font-semibold text-gray-900 mb-1.5">{title}</h3>
+                  <p className="text-xs text-gray-500 leading-relaxed">{desc}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </main>
+
+      {/* Floating admin panel */}
       <IndexingPanel />
-    </>
+
+      {/* Footer */}
+      <footer className="border-t border-gray-200 bg-white">
+        <div className="max-w-7xl mx-auto px-4 py-4 text-center text-xs text-gray-400">
+          Powered by Meilisearch · Flask · Next.js
+        </div>
+      </footer>
+    </div>
   )
 }
